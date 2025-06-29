@@ -1,0 +1,8 @@
+.vscode
+.vscode-test
+node_modules
+out
+dist
+src
+.gitignore
+.esbuild.config.mjs
