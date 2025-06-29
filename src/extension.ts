@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { createServer } from './server';
 import { Server } from 'http';
+import { LlmProxyPanel } from './webview/LlmProxyPanel';
 
 let server: Server | null = null;
 let statusBarItem: vscode.StatusBarItem;
@@ -36,7 +37,7 @@ function stopProxy(showMessage = false) {
 
 export function activate(context: vscode.ExtensionContext) {
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    statusBarItem.command = 'llm-proxy.openSettings';
+    statusBarItem.command = 'llm-proxy.openProxyPanel';
     context.subscriptions.push(statusBarItem);
 
     context.subscriptions.push(vscode.commands.registerCommand('llm-proxy.startProxy', () => {
@@ -47,41 +48,20 @@ export function activate(context: vscode.ExtensionContext) {
         stopProxy(true);
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('llm-proxy.addModel', async () => {
-        const alias = await vscode.window.showInputBox({ prompt: 'Enter a unique alias for the model (e.g., gpt-4o)' });
-        if (!alias) return;
-
-        const url = await vscode.window.showInputBox({ prompt: 'Enter the full URL of the LLM endpoint' });
-        if (!url) return;
-
-        const realModel = await vscode.window.showInputBox({ prompt: 'Enter the real model name (e.g., llama3)' });
-        if (!realModel) return;
-
-        const models = context.globalState.get<{[key: string]: {url: string, realModel: string}}>('llm-proxy.models', {});
-        models[alias] = { url, realModel };
-        await context.globalState.update('llm-proxy.models', models);
-        vscode.window.showInformationMessage(`Model '${alias}' added.`);
+    context.subscriptions.push(vscode.commands.registerCommand('llm-proxy.openProxyPanel', () => {
+        LlmProxyPanel.createOrShow(context.extensionUri, context);
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('llm-proxy.removeModel', async () => {
-        const models = context.globalState.get<{[key: string]: {url: string, realModel: string}}>('llm-proxy.models', {});
-        const modelAliases = Object.keys(models);
+    context.subscriptions.push(vscode.commands.registerCommand('llm-proxy.addModel', () => {
+        vscode.commands.executeCommand('llm-proxy.openProxyPanel');
+    }));
 
-        if (modelAliases.length === 0) {
-            vscode.window.showInformationMessage('No models to remove.');
-            return;
-        }
-
-        const aliasToRemove = await vscode.window.showQuickPick(modelAliases, { placeHolder: 'Select a model to remove' });
-        if (aliasToRemove) {
-            delete models[aliasToRemove];
-            await context.globalState.update('llm-proxy.models', models);
-            vscode.window.showInformationMessage(`Model '${aliasToRemove}' removed.`);
-        }
+    context.subscriptions.push(vscode.commands.registerCommand('llm-proxy.removeModel', () => {
+        vscode.commands.executeCommand('llm-proxy.openProxyPanel');
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('llm-proxy.openSettings', () => {
-        vscode.commands.executeCommand('workbench.action.openSettings', 'llm-proxy');
+        vscode.commands.executeCommand('llm-proxy.openProxyPanel');
     }));
 
     startProxy(context, false);

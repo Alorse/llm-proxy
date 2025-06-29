@@ -10,11 +10,6 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:llm-proxy.startProxy",
-    "onCommand:llm-proxy.stopProxy",
-    "onCommand:llm-proxy.addModel",
-    "onCommand:llm-proxy.removeModel",
-    "onCommand:llm-proxy.openSettings",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -39,6 +34,10 @@
       {
         "command": "llm-proxy.openSettings",
         "title": "Open Settings"
+      },
+      {
+        "command": "llm-proxy.openProxyPanel",
+        "title": "Open LLM Proxy Panel"
       }
     ]
   },
@@ -49,22 +48,22 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "vscode-test",
-    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "postinstall": "npm install"
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "18.x",
-    "eslint": "^8.56.0",
-    "typescript": "^5.3.3",
+    "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
     "@typescript-eslint/parser": "^7.0.2",
     "esbuild": "^0.20.2",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
     "vscode-test": "^1.6.1"
   },
   "dependencies": {
     "express": "^4.19.2",
     "http-proxy-middleware": "^3.0.0"
-  }
+  },
+  "packageManager": "yarn@4.9.2+sha512.1fc009bc09d13cfd0e19efa44cbfc2b9cf6ca61482725eb35bbc5e257e093ebf4130db6dfe15d604ff4b79efd8e1e8e99b25fa7d0a6197c9f9826358d4d65c3c"
 }
