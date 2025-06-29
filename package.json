@@ -14,32 +14,15 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "llm-proxy.startProxy",
-        "title": "Start Proxy"
-      },
-      {
-        "command": "llm-proxy.stopProxy",
-        "title": "Stop Proxy"
-      },
-      {
-        "command": "llm-proxy.addModel",
-        "title": "Add Model"
-      },
-      {
-        "command": "llm-proxy.removeModel",
-        "title": "Remove Model"
-      },
-      {
-        "command": "llm-proxy.openSettings",
-        "title": "Open Settings"
-      },
-      {
-        "command": "llm-proxy.openProxyPanel",
-        "title": "Open LLM Proxy Panel"
-      }
-    ]
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "llmProxy.modelView",
+          "name": "LLM Proxy"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run esbuild-base -- --minify",
@@ -51,6 +34,7 @@
     "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node"
   },
   "devDependencies": {
+    "@types/express": "^5.0.3",
     "@types/mocha": "^10.0.6",
     "@types/node": "18.x",
     "@types/vscode": "^1.85.0",

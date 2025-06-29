@@ -1,8 +1,13 @@
 import * as vscode from 'vscode';
 
-interface LlmModel {
+export interface Model {
     url: string;
     realModel: string;
+    status?: 'running' | 'stopped';
+}
+
+export interface Models {
+    [alias: string]: Model;
 }
 
 export class ModelManager {
@@ -13,14 +18,17 @@ export class ModelManager {
         this._context = context;
     }
 
-    public async getModels(): Promise<{[key: string]: LlmModel}> {
-        const models = this._context.globalState.get<{[key: string]: LlmModel}>(ModelManager.MODELS_KEY, {});
+    public async getModels(): Promise<Models> {
+        const models = this._context.globalState.get<Models>(ModelManager.MODELS_KEY, {});
         console.log('ModelManager: getModels - Retrieved models:', models);
         return models;
     }
 
     public async addModel(alias: string, url: string, realModel: string): Promise<void> {
         const models = await this.getModels();
+        if (models[alias]) {
+            throw new Error(`Model with alias ${alias} already exists`);
+        }
         models[alias] = { url, realModel };
         await this._context.globalState.update(ModelManager.MODELS_KEY, models);
         console.log(`ModelManager: addModel - Added model '${alias}'. Current models:`, models);
@@ -28,6 +36,9 @@ export class ModelManager {
 
     public async removeModel(alias: string): Promise<void> {
         const models = await this.getModels();
+        if (!models[alias]) {
+            throw new Error(`Model with alias ${alias} not found`);
+        }
         delete models[alias];
         await this._context.globalState.update(ModelManager.MODELS_KEY, models);
         console.log(`ModelManager: removeModel - Removed model '${alias}'. Current models:`, models);
@@ -35,10 +46,11 @@ export class ModelManager {
 
     public async updateModel(alias: string, url: string, realModel: string): Promise<void> {
         const models = await this.getModels();
-        if (models[alias]) {
-            models[alias] = { url, realModel };
-            await this._context.globalState.update(ModelManager.MODELS_KEY, models);
-            console.log(`ModelManager: updateModel - Updated model '${alias}'. Current models:`, models);
+        if (!models[alias]) {
+            throw new Error(`Model with alias ${alias} not found`);
         }
+        models[alias] = { url, realModel };
+        await this._context.globalState.update(ModelManager.MODELS_KEY, models);
+        console.log(`ModelManager: updateModel - Updated model '${alias}'. Current models:`, models);
     }
 }
