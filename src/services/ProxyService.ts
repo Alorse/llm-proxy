@@ -47,11 +47,13 @@ export class ProxyService {
                     body: req.body
                 });
 
-                // Forward all headers except host and connection
+                // Forward all headers except those we want to control
                 const headers = { ...req.headers };
                 delete headers.host;
                 delete headers.connection;
-                delete headers['content-length']; // Let fetch calculate this automatically
+                delete headers['content-length'];
+                delete headers['accept-encoding']; // Let fetch handle compression
+                delete headers['postman-token']; // Remove Postman-specific headers
 
                 // Ensure content-type is set
                 headers['content-type'] = 'application/json';
@@ -141,12 +143,13 @@ export class ProxyService {
                 // Forward response headers
                 response.headers.forEach((value, key) => {
                     // Skip headers that Express will set
-                    if (!['connection', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())) {
+                    if (!['connection', 'content-length', 'transfer-encoding', 'content-encoding'].includes(key.toLowerCase())) {
                         res.setHeader(key, value);
                     }
                 });
 
-                if (req.headers.accept?.includes('text/event-stream')) {
+                const isStreaming = req.body.stream === true;
+                if (isStreaming) {
                     res.setHeader('Content-Type', 'text/event-stream');
                     res.setHeader('Cache-Control', 'no-cache');
                     res.setHeader('Connection', 'keep-alive');
@@ -162,6 +165,7 @@ export class ProxyService {
                         if (done) break;
                         const chunk = decoder.decode(value);
                         console.log(`[${alias}] Streaming chunk:`, chunk);
+                        // Forward the SSE data as-is without parsing
                         res.write(chunk);
                     }
                     res.end();
