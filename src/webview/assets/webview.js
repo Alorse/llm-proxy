@@ -1,105 +1,203 @@
-const vscode = acquireVsCodeApi();
+/* global acquireVsCodeApi, document, window, console */
 
-const form = document.getElementById('model-form') as HTMLFormElement;
-const aliasInput = document.getElementById('alias') as HTMLInputElement;
-const urlInput = document.getElementById('url') as HTMLInputElement;
-const realModelInput = document.getElementById('realModel') as HTMLInputElement;
-const addButton = document.getElementById('add-button') as HTMLButtonElement;
-const updateButton = document.getElementById('update-button') as HTMLButtonElement;
-const cancelButton = document.getElementById('cancel-button') as HTMLButtonElement;
-const modelsTableBody = document.querySelector('#models-table tbody') as HTMLTableSectionElement;
+// Enhanced webview with local URL display
+(function() {
+    'use strict';
 
-let editingAlias: string | null = null;
+    const vscode = (function() {
+        try {
+            const api = acquireVsCodeApi();
+            return {
+                postMessage: api.postMessage,
+                getState: () => api.getState() || {},
+                setState: api.setState
+            };
+        } catch (error) {
+            console.error('VSCode API unavailable:', error);
+            return {
+                postMessage: (msg) => console.log('VSCode Simulated:', msg),
+                getState: () => ({}),
+                setState: () => {}
+            };
+        }
+    })();
 
-function renderModels(models: { [key: string]: { url: string; realModel: string } }) {
-    modelsTableBody.innerHTML = '';
-    for (const alias in models) {
-        const model = models[alias];
-        const row = modelsTableBody.insertRow();
-        row.insertCell().textContent = alias;
-        row.insertCell().textContent = model.url;
-        row.insertCell().textContent = model.realModel;
+    const state = {
+        editingAlias: null,
+        models: {},
+        serverStatus: {},
+        localEndpoints: {}
+    };
 
-        const actionsCell = row.insertCell();
-        const editButton = document.createElement('button');
-        editButton.textContent = 'Edit';
-        editButton.onclick = () => startEdit(alias, model.url, model.realModel);
-        actionsCell.appendChild(editButton);
+    const elements = {
+        form: document.getElementById('model-form'),
+        aliasInput: document.getElementById('alias'),
+        urlInput: document.getElementById('url'),
+        realModelInput: document.getElementById('realModel'),
+        addButton: document.getElementById('add-button'),
+        updateButton: document.getElementById('update-button'),
+        cancelButton: document.getElementById('cancel-button'),
+        modelsTableBody: document.querySelector('#models-table tbody'),
+        statusMessage: document.getElementById('status-message')
+    };
 
-        const deleteButton = document.createElement('button');
-        deleteButton.textContent = 'Delete';
-        deleteButton.onclick = () => deleteModel(alias);
-        actionsCell.appendChild(deleteButton);
+    function initEventListeners() {
+        elements.form.addEventListener('submit', handleSubmit);
+        elements.updateButton.addEventListener('click', handleSubmit);
+        elements.cancelButton.addEventListener('click', resetForm);
+        elements.modelsTableBody.addEventListener('click', handleTableClick);
     }
-}
 
-function startEdit(alias: string, url: string, realModel: string) {
-    editingAlias = alias;
-    aliasInput.value = alias;
-    urlInput.value = url;
-    realModelInput.value = realModel;
+    function handleSubmit(event) {
+        event.preventDefault();
+        if (!validateForm()) return;
 
-    addButton.style.display = 'none';
-    updateButton.style.display = 'inline-block';
-    cancelButton.style.display = 'inline-block';
-    aliasInput.readOnly = true; // Prevent changing alias during edit
-}
+        const command = state.editingAlias ? 'updateModel' : 'addModel';
+        const alias = state.editingAlias || elements.aliasInput.value.trim();
 
-function cancelEdit() {
-    editingAlias = null;
-    form.reset();
-    addButton.style.display = 'inline-block';
-    updateButton.style.display = 'none';
-    cancelButton.style.display = 'none';
-    aliasInput.readOnly = false;
-}
-
-form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const alias = aliasInput.value;
-    const url = urlInput.value;
-    const realModel = realModelInput.value;
-
-    if (editingAlias) {
         vscode.postMessage({
-            command: 'updateModel',
-            alias: editingAlias,
-            url,
-            realModel
-        });
-    } else {
-        vscode.postMessage({
-            command: 'addModel',
-            alias,
-            url,
-            realModel
+            command: command,
+            alias: alias,
+            url: elements.urlInput.value.trim(),
+            realModel: elements.realModelInput.value.trim()
         });
     }
-    cancelEdit();
-});
 
-updateButton.addEventListener('click', () => {
-    form.dispatchEvent(new Event('submit'));
-});
+    function validateForm() {
+        const alias = elements.aliasInput.value.trim();
+        const url = elements.urlInput.value.trim();
+        const realModel = elements.realModelInput.value.trim();
 
-cancelButton.addEventListener('click', cancelEdit);
+        if (!alias || !url || !realModel) {
+            showStatus('All fields are required', true);
+            return false;
+        }
 
-function deleteModel(alias: string) {
-    vscode.postMessage({
-        command: 'removeModel',
-        alias
-    });
-}
+        try {
+            new URL(url); // eslint-disable-line no-new
+        } catch {
+            showStatus('Invalid URL format', true);
+            return false;
+        }
 
-// Handle messages from the extension
-window.addEventListener('message', event => {
-    const message = event.data;
-    switch (message.command) {
-        case 'updateModels':
-            renderModels(message.models);
-            break;
+        return true;
     }
-});
 
-// Request initial models when the webview is loaded
-vscode.postMessage({ command: 'getModels' });
+    function resetForm() {
+        state.editingAlias = null;
+        elements.form.reset();
+        elements.aliasInput.readOnly = false;
+        elements.addButton.style.display = 'inline-block';
+        elements.updateButton.style.display = 'none';
+        elements.cancelButton.style.display = 'none';
+    }
+
+    function renderModels(models) {
+        state.models = models;
+        elements.modelsTableBody.innerHTML = '';
+        
+        Object.entries(models).forEach(([alias, model]) => {
+            const isRunning = state.serverStatus[alias]?.running || false;
+            const localUrl = state.localEndpoints[alias] || 'Not running';
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${alias}</td>
+                <td>${model.url}</td>
+                <td>${model.realModel}</td>
+                <td>${isRunning ? '🟢 Running' : '🔴 Stopped'}</td>
+                <td>${localUrl}</td>
+                <td>
+                    <button class="edit-btn" data-alias="${alias}">Edit</button>
+                    <button class="control-btn" data-alias="${alias}" data-action="${isRunning ? 'stop' : 'start'}">
+                        ${isRunning ? 'Stop' : 'Start'}
+                    </button>
+                    <button class="delete-btn" data-alias="${alias}">Delete</button>
+                </td>
+            `;
+            elements.modelsTableBody.appendChild(row);
+        });
+    }
+
+    function handleServerControl(alias, action) {
+        if (confirm(`Are you sure you want to ${action} model "${alias}"?`)) {
+            vscode.postMessage({
+                command: action === 'start' ? 'startServer' : 'stopServer',
+                alias: alias,
+                url: state.models[alias]?.url
+            });
+            
+            state.serverStatus[alias] = { 
+                running: action === 'start',
+                lastUpdated: new Date().toISOString()
+            };
+            renderModels(state.models);
+        }
+    }
+
+    function handleTableClick(event) {
+        const button = event.target.closest('button');
+        if (!button) return;
+
+        const alias = button.dataset.alias;
+        if (button.classList.contains('edit-btn')) {
+            const model = state.models[alias];
+            if (model) {
+                state.editingAlias = alias;
+                elements.aliasInput.value = alias;
+                elements.urlInput.value = model.url;
+                elements.realModelInput.value = model.realModel;
+                elements.aliasInput.readOnly = true;
+                elements.addButton.style.display = 'none';
+                elements.updateButton.style.display = 'inline-block';
+                elements.cancelButton.style.display = 'inline-block';
+            }
+        } 
+        else if (button.classList.contains('control-btn')) {
+            handleServerControl(alias, button.dataset.action);
+        }
+        else if (button.classList.contains('delete-btn')) {
+            if (confirm(`Delete model "${alias}"?`)) {
+                vscode.postMessage({
+                    command: 'removeModel',
+                    alias: alias
+                });
+            }
+        }
+    }
+
+    function showStatus(message, isError = false) {
+        elements.statusMessage.textContent = message;
+        elements.statusMessage.className = isError ? 'error' : 'success';
+        elements.statusMessage.style.display = 'block';
+        setTimeout(() => {
+            elements.statusMessage.style.display = 'none';
+        }, 5000);
+    }
+
+    function init() {
+        initEventListeners();
+        
+        window.addEventListener('message', (event) => {
+            const message = event.data;
+            if (message.command === 'updateModels') {
+                renderModels(message.models);
+                resetForm();
+            }
+            else if (message.command === 'serverStatus') {
+                state.serverStatus = message.status;
+                state.localEndpoints = message.localEndpoints || {};
+                renderModels(state.models);
+            }
+        });
+
+        vscode.postMessage({ command: 'getModels' });
+        vscode.postMessage({ command: 'getServerStatus' });
+        
+        setInterval(() => {
+            vscode.postMessage({ command: 'getServerStatus' });
+        }, 10000);
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+})();
