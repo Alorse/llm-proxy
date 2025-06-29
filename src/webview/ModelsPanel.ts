@@ -8,7 +8,7 @@ interface ModelWithStatus extends Model {
 }
 
 interface ModelsWithStatus {
-    [alias: string]: ModelWithStatus;
+    [id: string]: ModelWithStatus;
 }
 
 export class ModelsPanel implements vscode.WebviewViewProvider {
@@ -34,7 +34,7 @@ export class ModelsPanel implements vscode.WebviewViewProvider {
     }
 
     private _setWebviewMessageListener(webview: vscode.Webview): void {
-        webview.onDidReceiveMessage(async (message: { type: string; alias?: string; url?: string; realModel?: string; action?: string; message?: string }) => {
+        webview.onDidReceiveMessage(async (message: { type: string; id?: string; alias?: string; url?: string; realModel?: string; action?: string; message?: string }) => {
             try {
                 switch (message.type) {
                     case 'getModels': {
@@ -46,30 +46,32 @@ export class ModelsPanel implements vscode.WebviewViewProvider {
                         if (!message.alias || !message.url || !message.realModel) {
                             throw new Error('All fields are required');
                         }
-                        await this._modelManager.addModel(message.alias, message.url, message.realModel);
+                        const id = await this._modelManager.addModel(message.alias, message.url, message.realModel);
                         await vscode.window.showInformationMessage(`Model ${message.alias} added successfully`);
                         await this._refreshModels();
                         break;
                     }
 
                     case 'modelAction': {
-                        if (!message.alias || !message.action) {
+                        if (!message.id || !message.action) {
                             throw new Error('Missing required fields for model action');
                         }
-                        await this._handleModelAction(message.alias, message.action);
+                        await this._handleModelAction(message.id, message.action);
                         break;
                     }
 
                     case 'updateModel': {
-                        if (!message.alias || !message.url || !message.realModel) {
+                        if (!message.id || !message.alias || !message.url || !message.realModel) {
                             throw new Error('All fields are required');
                         }
-                        await this._modelManager.updateModel(message.alias, message.url, message.realModel);
+                        await this._modelManager.updateModel(message.id, message.alias, message.url, message.realModel);
                         await vscode.window.showInformationMessage(`Model ${message.alias} updated successfully`);
                         
-                        if (this._proxyService.isRunning(message.alias)) {
-                            this._proxyService.stopServer(message.alias);
-                            const port = await this._proxyService.startServer(message.alias, { url: message.url, realModel: message.realModel });
+                        const models = await this._modelManager.getModels();
+                        const model = models[message.id];
+                        if (this._proxyService.isRunning(model.alias)) {
+                            this._proxyService.stopServer(model.alias);
+                            const port = await this._proxyService.startServer(model.alias, model);
                             await vscode.window.showInformationMessage(
                                 `Proxy restarted for ${message.alias}\nURL: http://localhost:${port}/v1\nModel: ${message.realModel}`
                             );
@@ -92,29 +94,29 @@ export class ModelsPanel implements vscode.WebviewViewProvider {
         });
     }
 
-    private async _handleModelAction(alias: string, action: string): Promise<void> {
+    private async _handleModelAction(id: string, action: string): Promise<void> {
         const models = await this._modelManager.getModels();
-        const model = models[alias];
+        const model = models[id];
 
         if (!model) {
-            await vscode.window.showErrorMessage(`Model ${alias} not found`);
+            await vscode.window.showErrorMessage(`Model with ID ${id} not found`);
             return;
         }
 
         try {
             switch (action) {
                 case 'start': {
-                    const port = await this._proxyService.startServer(alias, model);
+                    const port = await this._proxyService.startServer(model.alias, model);
                     await vscode.window.showInformationMessage(
-                        `Proxy started for ${alias}\nURL: http://localhost:${port}/v1\nModel: ${model.realModel}`
+                        `Proxy started for ${model.alias}\nURL: http://localhost:${port}/v1\nModel: ${model.realModel}`
                     );
                     await this._refreshModels();
                     break;
                 }
 
                 case 'stop': {
-                    this._proxyService.stopServer(alias);
-                    await vscode.window.showInformationMessage(`Server for ${alias} stopped`);
+                    this._proxyService.stopServer(model.alias);
+                    await vscode.window.showInformationMessage(`Server for ${model.alias} stopped`);
                     await this._refreshModels();
                     break;
                 }
@@ -123,10 +125,7 @@ export class ModelsPanel implements vscode.WebviewViewProvider {
                     if (this._view) {
                         await this._view.webview.postMessage({
                             type: 'editModel',
-                            model: {
-                                alias,
-                                ...model
-                            }
+                            model
                         });
                     }
                     break;
@@ -134,16 +133,16 @@ export class ModelsPanel implements vscode.WebviewViewProvider {
 
                 case 'delete': {
                     const answer = await vscode.window.showWarningMessage(
-                        `Are you sure you want to delete model ${alias}?`,
+                        `Are you sure you want to delete model ${model.alias}?`,
                         'Yes',
                         'No'
                     );
                     if (answer === 'Yes') {
-                        await this._modelManager.removeModel(alias);
-                        if (this._proxyService.isRunning(alias)) {
-                            this._proxyService.stopServer(alias);
+                        if (this._proxyService.isRunning(model.alias)) {
+                            this._proxyService.stopServer(model.alias);
                         }
-                        await vscode.window.showInformationMessage(`Model ${alias} deleted`);
+                        await this._modelManager.removeModel(id);
+                        await vscode.window.showInformationMessage(`Model ${model.alias} deleted`);
                         await this._refreshModels();
                     }
                     break;
@@ -157,10 +156,10 @@ export class ModelsPanel implements vscode.WebviewViewProvider {
     private async _refreshModels(): Promise<void> {
         if (this._view) {
             const models = await this._modelManager.getModels();
-            const modelsWithStatus: ModelsWithStatus = Object.entries(models).reduce((acc, [alias, model]) => {
-                acc[alias] = {
+            const modelsWithStatus: ModelsWithStatus = Object.entries(models).reduce((acc, [id, model]) => {
+                acc[id] = {
                     ...model,
-                    status: this._proxyService.isRunning(alias) ? 'running' : 'stopped'
+                    status: this._proxyService.isRunning(model.alias) ? 'running' : 'stopped'
                 };
                 return acc;
             }, {} as ModelsWithStatus);

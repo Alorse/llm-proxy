@@ -41,10 +41,14 @@ export function getWebviewContent(): string {
             .status-stopped {
                 color: #f44336;
             }
+            .hidden {
+                display: none;
+            }
         </style>
     </head>
     <body>
         <div id="form">
+            <input type="hidden" id="modelId">
             <div class="form-group">
                 <label for="alias">Model Alias</label>
                 <input type="text" id="alias" placeholder="e.g., gpt-4">
@@ -58,6 +62,7 @@ export function getWebviewContent(): string {
                 <input type="text" id="realModel" placeholder="e.g., codellama:7b">
             </div>
             <button id="addModel">Add Model</button>
+            <button id="cancelEdit" class="hidden">Cancel</button>
         </div>
         <div id="models">
             <table>
@@ -76,9 +81,27 @@ export function getWebviewContent(): string {
         <script>
             (function() {
                 const vscode = acquireVsCodeApi();
+                let isEditing = false;
+                let currentModels = {};
+
+                // Initialize state
+                const state = vscode.getState() || { models: {} };
+                updateModelsList(state.models);
+
+                function resetForm() {
+                    document.getElementById('modelId').value = '';
+                    document.getElementById('alias').value = '';
+                    document.getElementById('alias').disabled = false;
+                    document.getElementById('url').value = '';
+                    document.getElementById('realModel').value = '';
+                    document.getElementById('addModel').textContent = 'Add Model';
+                    document.getElementById('cancelEdit').classList.add('hidden');
+                    isEditing = false;
+                }
 
                 // Handle form submission
                 document.getElementById('addModel').addEventListener('click', () => {
+                    const modelId = document.getElementById('modelId').value;
                     const alias = document.getElementById('alias').value;
                     const url = document.getElementById('url').value;
                     const realModel = document.getElementById('realModel').value;
@@ -91,17 +114,29 @@ export function getWebviewContent(): string {
                         return;
                     }
 
-                    vscode.postMessage({
-                        type: 'addModel',
-                        alias,
-                        url,
-                        realModel
-                    });
+                    if (isEditing) {
+                        vscode.postMessage({
+                            type: 'updateModel',
+                            id: modelId,
+                            alias,
+                            url,
+                            realModel
+                        });
+                    } else {
+                        vscode.postMessage({
+                            type: 'addModel',
+                            alias,
+                            url,
+                            realModel
+                        });
+                    }
 
-                    // Clear form
-                    document.getElementById('alias').value = '';
-                    document.getElementById('url').value = '';
-                    document.getElementById('realModel').value = '';
+                    resetForm();
+                });
+
+                // Handle cancel edit
+                document.getElementById('cancelEdit').addEventListener('click', () => {
+                    resetForm();
                 });
 
                 // Handle messages from extension
@@ -109,46 +144,20 @@ export function getWebviewContent(): string {
                     const message = event.data;
                     switch (message.type) {
                         case 'updateModels':
-                            updateModelsList(message.models);
+                            currentModels = message.models;
+                            vscode.setState({ models: currentModels });
+                            updateModelsList(currentModels);
                             break;
                         case 'editModel':
                             // Fill form with model data
+                            document.getElementById('modelId').value = message.model.id;
                             document.getElementById('alias').value = message.model.alias;
-                            document.getElementById('alias').disabled = true;
+                            document.getElementById('alias').disabled = false;
                             document.getElementById('url').value = message.model.url;
                             document.getElementById('realModel').value = message.model.realModel;
-                            
-                            // Change button text and behavior
-                            const addButton = document.getElementById('addModel');
-                            const originalOnClick = addButton.onclick;
-                            addButton.textContent = 'Update Model';
-                            addButton.onclick = () => {
-                                const url = document.getElementById('url').value;
-                                const realModel = document.getElementById('realModel').value;
-                                
-                                if (!url || !realModel) {
-                                    vscode.postMessage({
-                                        type: 'error',
-                                        message: 'All fields are required'
-                                    });
-                                    return;
-                                }
-                                
-                                vscode.postMessage({
-                                    type: 'updateModel',
-                                    alias: message.model.alias,
-                                    url,
-                                    realModel
-                                });
-                                
-                                // Reset form
-                                document.getElementById('alias').value = '';
-                                document.getElementById('alias').disabled = false;
-                                document.getElementById('url').value = '';
-                                document.getElementById('realModel').value = '';
-                                addButton.textContent = 'Add Model';
-                                addButton.onclick = originalOnClick;
-                            };
+                            document.getElementById('addModel').textContent = 'Update Model';
+                            document.getElementById('cancelEdit').classList.remove('hidden');
+                            isEditing = true;
                             break;
                     }
                 });
@@ -157,30 +166,32 @@ export function getWebviewContent(): string {
                     const tbody = document.getElementById('modelsList');
                     tbody.innerHTML = '';
 
-                    for (const [alias, model] of Object.entries(models)) {
+                    for (const [id, model] of Object.entries(models)) {
                         const tr = document.createElement('tr');
                         const status = model.status || 'stopped';
                         const statusText = status === 'running' ? '🟢 Running' : '🔴 Stopped';
                         const actionText = status === 'running' ? 'Stop' : 'Start';
                         
-                        tr.innerHTML = "<td>" + alias + "</td>" +
-                            "<td>" + model.realModel + "</td>" +
-                            "<td>" + model.url + "</td>" +
-                            '<td class="status-' + status + '">' + statusText + "</td>" +
-                            "<td>" +
-                            '<button onclick="handleAction(' + JSON.stringify(alias) + ", " + JSON.stringify(status === 'running' ? 'stop' : 'start') + ')">' + actionText + "</button> " +
-                            '<button onclick="handleAction(' + JSON.stringify(alias) + ', "edit")">Edit</button> ' +
-                            '<button onclick="handleAction(' + JSON.stringify(alias) + ', "delete")">Delete</button>' +
-                            "</td>";
+                        tr.innerHTML = \`
+                            <td>\${model.alias}</td>
+                            <td>\${model.realModel}</td>
+                            <td>\${model.url}</td>
+                            <td class="status-\${status}">\${statusText}</td>
+                            <td>
+                                <button onclick="handleAction('\${id}', '\${status === 'running' ? 'stop' : 'start'}')">\${actionText}</button>
+                                <button onclick="handleAction('\${id}', 'edit')">Edit</button>
+                                <button onclick="handleAction('\${id}', 'delete')">Delete</button>
+                            </td>
+                        \`;
                         tbody.appendChild(tr);
                     }
                 }
 
                 // Global function for handling model actions
-                window.handleAction = function(alias, action) {
+                window.handleAction = function(id, action) {
                     vscode.postMessage({
                         type: 'modelAction',
-                        alias,
+                        id,
                         action
                     });
                 };

@@ -1,27 +1,32 @@
-import * as express from 'express';
-import { Server } from 'http';
+import express, { Request, Response } from 'express';
+import * as vscode from 'vscode';
 import { Model } from '../data/ModelManager';
 
-interface ServerInfo {
-    server: Server;
-    port: number;
+interface ProxyServer {
+    app: express.Application;
+    server: any;
+}
+
+interface ProxyServers {
+    [alias: string]: ProxyServer;
 }
 
 export class ProxyService {
-    private servers: Map<string, ServerInfo> = new Map();
-    private nextPort: number = 3000;
+    private servers: ProxyServers = {};
 
-    startServer(alias: string, model: Model): Promise<number> {
-        if (this.servers.has(alias)) {
+    public async startServer(alias: string, model: Model): Promise<number> {
+        if (this.servers[alias]) {
             throw new Error(`Server for ${alias} is already running`);
         }
 
         const app = express();
+        const port = await this.findAvailablePort(3000);
+
         app.use(express.json());
 
-        app.post('/v1/*', async (req, res) => {
+        app.post('/v1/chat/completions', async (req: Request, res: Response) => {
             try {
-                const response = await fetch(model.url, {
+                const response = await fetch(model.url + '/chat/completions', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -32,76 +37,86 @@ export class ProxyService {
                     })
                 });
 
-                // Set up SSE if the response is streaming
-                if (response.headers.get('content-type')?.includes('text/event-stream')) {
+                if (req.headers.accept?.includes('text/event-stream')) {
                     res.setHeader('Content-Type', 'text/event-stream');
                     res.setHeader('Cache-Control', 'no-cache');
                     res.setHeader('Connection', 'keep-alive');
 
                     const reader = response.body?.getReader();
                     if (!reader) {
-                        throw new Error('No reader available for streaming response');
+                        throw new Error('No reader available');
                     }
 
-                    let done = false;
-                    while (!done) {
-                        const result = await reader.read();
-                        done = result.done;
-                        if (!done) {
-                            res.write(new TextDecoder().decode(result.value));
-                        }
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        res.write(decoder.decode(value));
                     }
                     res.end();
                 } else {
-                    // Regular JSON response
                     const data = await response.json();
                     res.json(data);
                 }
             } catch (error) {
                 console.error('Error in proxy request:', error);
-                res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+                res.status(500).json({
+                    error: {
+                        message: error instanceof Error ? error.message : 'An unknown error occurred'
+                    }
+                });
             }
         });
 
-        return new Promise((resolve) => {
-            const port = this.nextPort++;
-            const server = app.listen(port, () => {
-                this.servers.set(alias, { server, port });
-                resolve(port);
-            });
-        });
-    }
-
-    stopServer(alias: string): void {
-        const serverInfo = this.servers.get(alias);
-        if (serverInfo) {
-            serverInfo.server.close();
-            this.servers.delete(alias);
-        }
-    }
-
-    isRunning(alias: string): boolean {
-        return this.servers.has(alias);
-    }
-
-    public stopAllServers(): void {
-        for (const [alias, { server }] of this.servers.entries()) {
-            server.close();
-            console.log(`Stopped server for model ${alias}`);
-        }
-        this.servers.clear();
-    }
-
-    private async findAvailablePort(start: number, end: number): Promise<number> {
-        for (let port = start; port <= end; port++) {
+        return new Promise((resolve, reject) => {
             try {
-                const server = express().listen(port);
-                server.close();
-                return port;
-            } catch {
-                continue;
+                const server = app.listen(port, () => {
+                    this.servers[alias] = { app, server };
+                    console.log(`Proxy server for ${alias} started on port ${port}`);
+                    resolve(port);
+                });
+
+                server.on('error', (error: Error) => {
+                    console.error(`Error starting server for ${alias}:`, error);
+                    reject(error);
+                });
+            } catch (error) {
+                console.error(`Error in server setup for ${alias}:`, error);
+                reject(error);
             }
+        });
+    }
+
+    public stopServer(alias: string): void {
+        const server = this.servers[alias];
+        if (server) {
+            server.server.close();
+            delete this.servers[alias];
+            console.log(`Server for ${alias} stopped`);
         }
-        throw new Error('No available ports found');
+    }
+
+    public isRunning(alias: string): boolean {
+        return !!this.servers[alias];
+    }
+
+    private async findAvailablePort(startPort: number): Promise<number> {
+        const isPortAvailable = (port: number): Promise<boolean> => {
+            return new Promise((resolve) => {
+                const server = require('net').createServer();
+                server.once('error', () => resolve(false));
+                server.once('listening', () => {
+                    server.close();
+                    resolve(true);
+                });
+                server.listen(port);
+            });
+        };
+
+        let port = startPort;
+        while (!(await isPortAvailable(port))) {
+            port++;
+        }
+        return port;
     }
 } 
