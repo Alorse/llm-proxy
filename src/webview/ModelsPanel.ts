@@ -164,6 +164,12 @@ export class ModelsPanel implements vscode.WebviewViewProvider {
                 return acc;
             }, {} as ModelsWithStatus);
 
+            // Force a complete refresh of the webview
+            this._view.webview.html = getWebviewContent();
+            
+            // Wait a bit for the webview to initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             await this._view.webview.postMessage({
                 type: 'updateModels',
                 models: modelsWithStatus
