@@ -1,9 +1,10 @@
-/* global acquireVsCodeApi, document, window, console */
+/* global acquireVsCodeApi, document, window, console, setTimeout, setInterval, confirm, URL */
 
-// Enhanced webview with local URL display
+// Enhanced webview with server status and controls
 (function() {
     'use strict';
 
+    // Initialize VSCode API
     const vscode = (function() {
         try {
             const api = acquireVsCodeApi();
@@ -25,8 +26,7 @@
     const state = {
         editingAlias: null,
         models: {},
-        serverStatus: {},
-        localEndpoints: {}
+        serverStatus: {}
     };
 
     const elements = {
@@ -41,6 +41,7 @@
         statusMessage: document.getElementById('status-message')
     };
 
+    // Event listeners setup
     function initEventListeners() {
         elements.form.addEventListener('submit', handleSubmit);
         elements.updateButton.addEventListener('click', handleSubmit);
@@ -74,7 +75,7 @@
         }
 
         try {
-            new URL(url); // eslint-disable-line no-new
+            new URL(url);
         } catch {
             showStatus('Invalid URL format', true);
             return false;
@@ -98,15 +99,12 @@
         
         Object.entries(models).forEach(([alias, model]) => {
             const isRunning = state.serverStatus[alias]?.running || false;
-            const localUrl = state.localEndpoints[alias] || 'Not running';
-            
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${alias}</td>
                 <td>${model.url}</td>
                 <td>${model.realModel}</td>
                 <td>${isRunning ? '🟢 Running' : '🔴 Stopped'}</td>
-                <td>${localUrl}</td>
                 <td>
                     <button class="edit-btn" data-alias="${alias}">Edit</button>
                     <button class="control-btn" data-alias="${alias}" data-action="${isRunning ? 'stop' : 'start'}">
@@ -120,19 +118,17 @@
     }
 
     function handleServerControl(alias, action) {
-        if (confirm(`Are you sure you want to ${action} model "${alias}"?`)) {
-            vscode.postMessage({
-                command: action === 'start' ? 'startServer' : 'stopServer',
-                alias: alias,
-                url: state.models[alias]?.url
-            });
-            
-            state.serverStatus[alias] = { 
-                running: action === 'start',
-                lastUpdated: new Date().toISOString()
-            };
-            renderModels(state.models);
-        }
+        vscode.postMessage({
+            command: action === 'start' ? 'startServer' : 'stopServer',
+            alias: alias,
+            url: state.models[alias]?.url
+        });
+        
+        state.serverStatus[alias] = { 
+            running: action === 'start',
+            lastUpdated: new Date().toISOString()
+        };
+        renderModels(state.models);
     }
 
     function handleTableClick(event) {
@@ -186,7 +182,6 @@
             }
             else if (message.command === 'serverStatus') {
                 state.serverStatus = message.status;
-                state.localEndpoints = message.localEndpoints || {};
                 renderModels(state.models);
             }
         });

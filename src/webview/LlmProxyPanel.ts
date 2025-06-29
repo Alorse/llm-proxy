@@ -2,14 +2,6 @@ import * as vscode from 'vscode';
 import { getWebviewContent } from './htmlContent';
 import { ModelManager } from '../data/ModelManager';
 
-interface WebviewMessage {
-    command: string;
-    alias?: string;
-    url?: string;
-    realModel?: string;
-    [key: string]: any;
-}
-
 export class LlmProxyPanel {
     public static currentPanel: LlmProxyPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
@@ -45,6 +37,7 @@ export class LlmProxyPanel {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._extensionContext = extensionContext;
+        // Use VS Code's globalState for persistence instead of webview.state
         this._modelManager = new ModelManager(this._extensionContext);
 
         this._update();
@@ -52,14 +45,35 @@ export class LlmProxyPanel {
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.webview.onDidReceiveMessage(
-            (message: WebviewMessage) => this._handleMessage(message),
+            async message => {
+                console.log('LlmProxyPanel: Message received from webview:', message);
+                switch (message.command) {
+                    case 'addModel':
+                        await this._modelManager.addModel(message.alias, message.url, message.realModel);
+                        this._postModels();
+                        return;
+                    case 'removeModel':
+                        await this._modelManager.removeModel(message.alias);
+                        this._postModels();
+                        return;
+                    case 'updateModel':
+                        await this._modelManager.updateModel(message.alias, message.url, message.realModel);
+                        this._postModels();
+                        return;
+                    case 'getModels':
+                        this._postModels();
+                        return;
+                }
+            },
             null,
             this._disposables
         );
     }
 
     public dispose() {
+        console.log('LlmProxyPanel: Disposing panel.');
         LlmProxyPanel.currentPanel = undefined;
+
         this._panel.dispose();
 
         while (this._disposables.length) {
@@ -70,113 +84,26 @@ export class LlmProxyPanel {
         }
     }
 
-    private async _handleMessage(message: WebviewMessage) {
-        try {
-            console.log('Message received:', message);
-            
-            switch (message.command) {
-                case 'addModel':
-                    await this._addModelHandler(message);
-                    break;
-                case 'removeModel':
-                    await this._removeModelHandler(message);
-                    break;
-                case 'updateModel':
-                    await this._updateModelHandler(message);
-                    break;
-                case 'getModels':
-                    await this._getModelsHandler();
-                    break;
-                case 'startServer':
-                    await this._startServerHandler(message);
-                    break;
-                case 'stopServer':
-                    await this._stopServerHandler(message);
-                    break;
-                case 'getServerStatus':
-                    await this._getServerStatusHandler();
-                    break;
-                default:
-                    throw new Error(`Unknown command: ${message.command}`);
-            }
-        } catch (error: unknown) {
-            console.error('Error handling message:', error);
-            this._panel.webview.postMessage({
-                command: 'error',
-                text: error instanceof Error ? error.message : 'Unknown error'
-            });
-        }
-    }
-
-    private async _addModelHandler(message: WebviewMessage) {
-        await this._modelManager.addModel(message.alias!, message.url!, message.realModel!);
-        await this._postModels();
-    }
-
-    private async _removeModelHandler(message: WebviewMessage) {
-        await this._modelManager.removeModel(message.alias!);
-        await this._postModels();
-    }
-
-    private async _updateModelHandler(message: WebviewMessage) {
-        await this._modelManager.updateModel(message.alias!, message.url!, message.realModel!);
-        await this._postModels();
-    }
-
-    private async _getModelsHandler() {
-        await this._postModels();
-    }
-
-    private async _startServerHandler(message: WebviewMessage) {
-        const startStatus = await this._modelManager.startServer(message.alias!);
-        await this._postServerStatus();
-        this._panel.webview.postMessage({
-            command: 'serverStarted',
-            alias: message.alias,
-            url: startStatus.localUrl
-        });
-    }
-
-    private async _stopServerHandler(message: WebviewMessage) {
-        await this._modelManager.stopServer(message.alias!);
-        await this._postServerStatus();
-        this._panel.webview.postMessage({
-            command: 'serverStopped',
-            alias: message.alias
-        });
-    }
-
-    private async _getServerStatusHandler() {
-        await this._postServerStatus();
-    }
-
     private async _postModels() {
         const models = await this._modelManager.getModels();
-        this._panel.webview.postMessage({ command: 'updateModels', models });
-    }
-
-    private async _postServerStatus() {
-        const status = await this._modelManager.getServerStatus();
-        this._panel.webview.postMessage({ 
-            command: 'serverStatus', 
-            status,
-            localEndpoints: status
-        });
+        console.log('LlmProxyPanel: Posting models to webview:', models);
+        this._panel.webview.postMessage({ command: 'updateModels', models: models });
     }
 
     private _update() {
         const webview = this._panel.webview;
-        const scriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'assets', 'webview.js')
-        );
-        const styleUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'assets', 'main.css')
-        );
+        this._panel.title = 'LLM Proxy Management';
+
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'assets', 'webview.js'));
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'assets', 'main.css'));
+
+        // Use a nonce to only allow a specific script to be run.
+        const nonce = getNonce();
 
         this._panel.webview.html = getWebviewContent()
-            .replace('${scriptUri}', scriptUri.toString())
-            .replace('${styleUri}', styleUri.toString())
-            .replace('${nonce}', getNonce());
+            .replace('${vscode-resource:/src/webview/assets/main.css}', styleUri.toString())
+            .replace('${vscode-resource:/src/webview/assets/webview.js}', scriptUri.toString())
+            .replace('${nonce}', nonce);
     }
 }
 
