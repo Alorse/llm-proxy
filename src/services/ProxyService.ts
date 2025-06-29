@@ -1,5 +1,4 @@
-import express, { Request, Response, RequestHandler } from 'express';
-import * as vscode from 'vscode';
+import express from 'express';
 import { Model } from '../data/ModelManager';
 
 interface ProxyServer {
@@ -39,7 +38,7 @@ export class ProxyService {
 
         app.use(express.json());
 
-        const handleRequest: RequestHandler = async (req, res) => {
+        const handleRequest = async (req: express.Request, res: express.Response) => {
             try {
                 // Log incoming request
                 console.log(`[${alias}] Incoming request:`, {
@@ -225,6 +224,20 @@ export class ProxyService {
 
     public isRunning(alias: string): boolean {
         return !!this.servers[alias];
+    }
+
+    public getServer(alias: string): { port: number } | undefined {
+        const server = this.servers[alias];
+        if (!server) {
+            return undefined;
+        }
+
+        const address = server.server.address();
+        if (!address || typeof address === 'string') {
+            return undefined;
+        }
+
+        return { port: address.port };
     }
 
     private async findAvailablePort(startPort: number): Promise<number> {

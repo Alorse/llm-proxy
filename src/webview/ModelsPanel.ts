@@ -1,179 +1,143 @@
 import * as vscode from 'vscode';
-import { ModelManager, Model } from '../data/ModelManager';
-import { ProxyService } from '../services/ProxyService';
-import { getWebviewContent } from './templates/modelsPanel';
+import { getModelsPanel } from './templates/modelsPanel';
+import { ModelManager } from '../data/ModelManager';
 
-interface ModelWithStatus extends Model {
-    status: 'running' | 'stopped';
+interface WebviewMessage {
+    type: string;
+    alias?: string;
 }
 
-interface ModelsWithStatus {
-    [id: string]: ModelWithStatus;
-}
+export class ModelsPanel {
+    public static currentPanel: ModelsPanel | undefined;
+    private readonly _webview: vscode.Webview;
+    private _disposables: vscode.Disposable[] = [];
+    private _modelManager: ModelManager;
+    private _extensionUri: vscode.Uri;
 
-export class ModelsPanel implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'llmProxy.modelView';
-    private _view?: vscode.WebviewView;
+    private constructor(webview: vscode.Webview, modelManager: ModelManager, extensionUri: vscode.Uri) {
+        this._webview = webview;
+        this._modelManager = modelManager;
+        this._extensionUri = extensionUri;
 
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _modelManager: ModelManager,
-        private readonly _proxyService: ProxyService
-    ) {}
+        console.log('ModelsPanel constructor called');
 
-    public resolveWebviewView(webviewView: vscode.WebviewView): void {
-        this._view = webviewView;
-
-        webviewView.webview.options = {
+        // Configure webview
+        this._webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
 
-        webviewView.webview.html = getWebviewContent();
-        this._setWebviewMessageListener(webviewView.webview);
-    }
-
-    private _setWebviewMessageListener(webview: vscode.Webview): void {
-        webview.onDidReceiveMessage(async (message: { type: string; id?: string; alias?: string; url?: string; realModel?: string; action?: string; message?: string }) => {
-            try {
-                switch (message.type) {
-                    case 'getModels': {
-                        await this._refreshModels();
-                        break;
-                    }
-
-                    case 'addModel': {
-                        if (!message.alias || !message.url || !message.realModel) {
-                            throw new Error('All fields are required');
-                        }
-                        const id = await this._modelManager.addModel(message.alias, message.url, message.realModel);
-                        await vscode.window.showInformationMessage(`Model ${message.alias} added successfully`);
-                        await this._refreshModels();
-                        break;
-                    }
-
-                    case 'modelAction': {
-                        if (!message.id || !message.action) {
-                            throw new Error('Missing required fields for model action');
-                        }
-                        await this._handleModelAction(message.id, message.action);
-                        break;
-                    }
-
-                    case 'updateModel': {
-                        if (!message.id || !message.alias || !message.url || !message.realModel) {
-                            throw new Error('All fields are required');
-                        }
-                        await this._modelManager.updateModel(message.id, message.alias, message.url, message.realModel);
-                        await vscode.window.showInformationMessage(`Model ${message.alias} updated successfully`);
-                        
-                        const models = await this._modelManager.getModels();
-                        const model = models[message.id];
-                        if (this._proxyService.isRunning(model.alias)) {
-                            this._proxyService.stopServer(model.alias);
-                            const port = await this._proxyService.startServer(model.alias, model);
-                            await vscode.window.showInformationMessage(
-                                `Proxy restarted for ${message.alias}\nURL: http://localhost:${port}/v1\nModel: ${message.realModel}`
-                            );
-                        }
-                        
-                        await this._refreshModels();
-                        break;
-                    }
-
-                    case 'error': {
-                        if (message.message) {
-                            await vscode.window.showErrorMessage(message.message);
-                        }
-                        break;
-                    }
-                }
-            } catch (error) {
-                await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'An unknown error occurred');
-            }
+        // Set the webview's initial html content
+        this._update().then(() => {
+            console.log('Initial update completed');
+        }).catch(error => {
+            console.error('Error in initial update:', error);
         });
-    }
 
-    private async _handleModelAction(id: string, action: string): Promise<void> {
-        const models = await this._modelManager.getModels();
-        const model = models[id];
-
-        if (!model) {
-            await vscode.window.showErrorMessage(`Model with ID ${id} not found`);
-            return;
-        }
-
-        try {
-            switch (action) {
-                case 'start': {
-                    const port = await this._proxyService.startServer(model.alias, model);
-                    await vscode.window.showInformationMessage(
-                        `Proxy started for ${model.alias}\nURL: http://localhost:${port}/v1\nModel: ${model.realModel}`
-                    );
-                    await this._refreshModels();
-                    break;
-                }
-
-                case 'stop': {
-                    this._proxyService.stopServer(model.alias);
-                    await vscode.window.showInformationMessage(`Server for ${model.alias} stopped`);
-                    await this._refreshModels();
-                    break;
-                }
-
-                case 'edit': {
-                    if (this._view) {
-                        await this._view.webview.postMessage({
-                            type: 'editModel',
-                            model
-                        });
+        // Handle messages from the webview
+        this._webview.onDidReceiveMessage(
+            async (message: WebviewMessage) => {
+                console.log('Received message:', message);
+                try {
+                    switch (message.type) {
+                        case 'refresh':
+                            await this._update();
+                            break;
+                        case 'startProxy':
+                            if (message.alias) {
+                                const model = await this._modelManager.getModel(message.alias);
+                                if (model) {
+                                    await this._modelManager.startProxy(message.alias);
+                                    await this._update();
+                                }
+                            }
+                            break;
+                        case 'stopProxy':
+                            if (message.alias) {
+                                await this._modelManager.stopProxy(message.alias);
+                                await this._update();
+                            }
+                            break;
+                        case 'deleteModel':
+                            if (message.alias) {
+                                await this._modelManager.deleteModel(message.alias);
+                                await this._update();
+                            }
+                            break;
                     }
-                    break;
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+                    console.error('Error handling message:', error);
+                    await vscode.window.showErrorMessage(errorMessage);
                 }
+            },
+            undefined,
+            this._disposables
+        );
 
-                case 'delete': {
-                    const answer = await vscode.window.showWarningMessage(
-                        `Are you sure you want to delete model ${model.alias}?`,
-                        'Yes',
-                        'No'
-                    );
-                    if (answer === 'Yes') {
-                        if (this._proxyService.isRunning(model.alias)) {
-                            this._proxyService.stopServer(model.alias);
-                        }
-                        await this._modelManager.removeModel(id);
-                        await vscode.window.showInformationMessage(`Model ${model.alias} deleted`);
-                        await this._refreshModels();
-                    }
-                    break;
-                }
-            }
-        } catch (error) {
-            await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'An unknown error occurred');
-        }
-    }
-
-    private async _refreshModels(): Promise<void> {
-        if (this._view) {
-            const models = await this._modelManager.getModels();
-            const modelsWithStatus: ModelsWithStatus = Object.entries(models).reduce((acc, [id, model]) => {
-                acc[id] = {
-                    ...model,
-                    status: this._proxyService.isRunning(model.alias) ? 'running' : 'stopped'
-                };
-                return acc;
-            }, {} as ModelsWithStatus);
-
-            // Force a complete refresh of the webview
-            this._view.webview.html = getWebviewContent();
-            
-            // Wait a bit for the webview to initialize
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            await this._view.webview.postMessage({
-                type: 'updateModels',
-                models: modelsWithStatus
+        // Update the content every 2 seconds
+        setInterval(() => {
+            this._update().catch(error => {
+                console.error('Error in periodic update:', error);
             });
+        }, 2000);
+    }
+
+    public static createOrShow(extensionUri: vscode.Uri, modelManager: ModelManager, webview: vscode.Webview) {
+        console.log('createOrShow called');
+        
+        // If we already have a panel, dispose it
+        if (ModelsPanel.currentPanel) {
+            ModelsPanel.currentPanel.dispose();
+        }
+
+        ModelsPanel.currentPanel = new ModelsPanel(webview, modelManager, extensionUri);
+        console.log('New panel created');
+    }
+
+    public static async refresh() {
+        if (ModelsPanel.currentPanel) {
+            await ModelsPanel.currentPanel._update();
+        }
+    }
+
+    private async _update() {
+        console.log('_update called');
+        try {
+            const models = await this._modelManager.getAllModels();
+            console.log('Retrieved models:', models);
+
+            const modelsWithStatus = models.map(model => ({
+                ...model,
+                isRunning: this._modelManager.isProxyRunning(model.alias),
+                port: this._modelManager.getProxyPort(model.alias)
+            }));
+            console.log('Models with status:', modelsWithStatus);
+
+            // Set initial HTML
+            const html = getModelsPanel(modelsWithStatus);
+            this._webview.html = html;
+            console.log('HTML updated');
+
+            // Post message to update the view
+            await this._webview.postMessage({ type: 'updateModels', models: modelsWithStatus });
+            console.log('Update message posted');
+        } catch (error) {
+            console.error('Error updating webview:', error);
+            this._webview.html = getModelsPanel([]);
+        }
+    }
+
+    public dispose() {
+        console.log('dispose called');
+        ModelsPanel.currentPanel = undefined;
+
+        // Clean up our resources
+        while (this._disposables.length) {
+            const x = this._disposables.pop();
+            if (x) {
+                x.dispose();
+            }
         }
     }
 } 

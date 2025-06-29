@@ -1,53 +1,75 @@
 {
   "name": "llm-proxy",
   "displayName": "LLM Proxy",
-  "description": "A VSCode extension that proxies LLM requests.",
+  "description": "A proxy server for LLM requests",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.86.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onStartupFinished"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "llm-proxy.addModel",
+        "title": "LLM Proxy: Add Model"
+      },
+      {
+        "command": "llm-proxy.showModels",
+        "title": "LLM Proxy: Show Models"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "llm-proxy",
+          "title": "LLM Proxy",
+          "icon": "$(server)"
+        }
+      ]
+    },
     "views": {
-      "explorer": [
+      "llm-proxy": [
         {
           "type": "webview",
-          "id": "llmProxy.modelView",
-          "name": "LLM Proxy"
+          "id": "llm-proxy-models",
+          "name": "Models",
+          "icon": "$(server)"
         }
       ]
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run esbuild-base -- --minify",
-    "compile": "npm run esbuild-base -- --sourcemap",
-    "watch": "npm run esbuild-base -- --sourcemap --watch",
-    "pretest": "npm run compile && npm run lint",
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "vscode-test",
-    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node"
+    "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/express": "^5.0.3",
+    "@types/express": "^4.17.21",
     "@types/mocha": "^10.0.6",
     "@types/node": "18.x",
-    "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^7.7.0",
-    "@typescript-eslint/parser": "^7.7.0",
-    "esbuild": "^0.20.2",
-    "eslint": "^8.57.0",
-    "typescript": "^5.8.3",
-    "vscode-test": "^1.6.1"
+    "@types/vscode": "^1.86.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.1",
+    "@typescript-eslint/parser": "^6.19.1",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.3.9",
+    "eslint": "^8.56.0",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.3.3",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^6.0.1"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "http-proxy-middleware": "^3.0.0"
+    "express": "^4.18.2"
   },
   "packageManager": "yarn@4.9.2+sha512.1fc009bc09d13cfd0e19efa44cbfc2b9cf6ca61482725eb35bbc5e257e093ebf4130db6dfe15d604ff4b79efd8e1e8e99b25fa7d0a6197c9f9826358d4d65c3c"
 }
