@@ -5,7 +5,7 @@ import { ModelsPanel } from './webview/ModelsPanel';
 let modelManager: ModelManager;
 let statusBarItem: vscode.StatusBarItem;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     modelManager = new ModelManager(context);
 
     // Status bar
@@ -119,7 +119,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(addModelCommand, showModelsCommand);
 
     // Al activar, iniciar el modelo default si existe
-    startDefaultModelAndStatusBar();
+    await startDefaultModelAndStatusBar();
 }
 
 async function startDefaultModelAndStatusBar() {
@@ -131,7 +131,7 @@ async function startDefaultModelAndStatusBar() {
             await updateStatusBar();
         } catch (error) {
             await updateStatusBar('Error');
-            await vscode.window.showErrorMessage(`Failed to start default model: ${error instanceof Error ? error.message : error}`);
+            await vscode.window.showErrorMessage(`Failed to start default model: ${error instanceof Error ? error.message : String(error)}`);
         }
     } else {
         await updateStatusBar('No default');
