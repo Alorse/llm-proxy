@@ -19,8 +19,6 @@ export class ModelsPanel {
         this._modelManager = modelManager;
         this._extensionUri = extensionUri;
 
-        console.log('ModelsPanel constructor called');
-
         // Configure webview
         this._webview.options = {
             enableScripts: true,
@@ -29,7 +27,6 @@ export class ModelsPanel {
 
         // Set the webview's initial html content
         this._update().then(() => {
-            console.log('Initial update completed');
         }).catch(error => {
             console.error('Error in initial update:', error);
         });
@@ -37,7 +34,6 @@ export class ModelsPanel {
         // Handle messages from the webview
         this._webview.onDidReceiveMessage(
             async (message: WebviewMessage) => {
-                console.log('Received message:', message);
                 try {
                     switch (message.type) {
                         case 'refresh':
@@ -173,15 +169,11 @@ export class ModelsPanel {
     }
 
     public static createOrShow(extensionUri: vscode.Uri, modelManager: ModelManager, webview: vscode.Webview) {
-        console.log('createOrShow called');
-        
-        // If we already have a panel, dispose it
         if (ModelsPanel.currentPanel) {
             ModelsPanel.currentPanel.dispose();
         }
 
         ModelsPanel.currentPanel = new ModelsPanel(webview, modelManager, extensionUri);
-        console.log('New panel created');
     }
 
     public static async refresh() {
@@ -191,26 +183,21 @@ export class ModelsPanel {
     }
 
     private async _update() {
-        console.log('_update called');
         try {
             const models = await this._modelManager.getAllModels();
-            console.log('Retrieved models:', models);
 
             const modelsWithStatus = models.map(model => ({
                 ...model,
                 isRunning: this._modelManager.isProxyRunning(model.alias),
                 port: this._modelManager.getProxyPort(model.alias)
             }));
-            console.log('Models with status:', modelsWithStatus);
 
             // Set initial HTML
             const html = getModelsPanel(modelsWithStatus);
             this._webview.html = html;
-            console.log('HTML updated');
 
             // Post message to update the view
             await this._webview.postMessage({ type: 'updateModels', models: modelsWithStatus });
-            console.log('Update message posted');
         } catch (error) {
             console.error('Error updating webview:', error);
             this._webview.html = getModelsPanel([]);
@@ -218,7 +205,6 @@ export class ModelsPanel {
     }
 
     public dispose() {
-        console.log('dispose called');
         ModelsPanel.currentPanel = undefined;
 
         // Clean up our resources

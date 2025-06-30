@@ -48,12 +48,6 @@ export class ProxyService {
 
         const handleRequest = async (req: express.Request, res: express.Response) => {
             try {
-                // Log incoming request
-                console.log(`[${alias}] Incoming request:`, {
-                    headers: req.headers,
-                    body: req.body as Record<string, unknown>
-                });
-
                 // Forward all headers except those we want to control
                 const headers = { ...req.headers };
                 delete headers.host;
@@ -70,7 +64,6 @@ export class ProxyService {
                 try {
                     new URL(targetUrl);
                 } catch (error) {
-                    console.error(`[${alias}] Invalid target URL:`, targetUrl);
                     res.status(400).json({
                         error: {
                             message: 'Invalid target URL configuration',
@@ -80,15 +73,11 @@ export class ProxyService {
                     return;
                 }
 
-                console.log(`[${alias}] Forwarding request to:`, targetUrl);
-                console.log(`[${alias}] With headers:`, headers);
-
                 const requestBody = {
                     ...(req.body as Record<string, unknown>),
                     model: model.realModel
                 };
                 const requestBodyString = JSON.stringify(requestBody);
-                console.log(`[${alias}] With body:`, requestBody);
 
                 let response;
                 try {
@@ -98,11 +87,6 @@ export class ProxyService {
                         body: requestBodyString
                     });
                 } catch (fetchError) {
-                    console.error(`[${alias}] Fetch error:`, fetchError);
-                    console.error(`[${alias}] Target URL:`, targetUrl);
-                    console.error(`[${alias}] Request headers:`, headers);
-                    console.error(`[${alias}] Request body:`, requestBody);
-
                     // Check if it's a DNS or connection error
                     const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error';
                     if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('ECONNREFUSED')) {
@@ -125,19 +109,14 @@ export class ProxyService {
                     return;
                 }
 
-                // Log response status
-                console.log(`[${alias}] Response status:`, response.status);
-                
                 // Convert headers to object for logging
                 const responseHeadersObj: Record<string, string> = {};
                 response.headers.forEach((value, key) => {
                     responseHeadersObj[key] = value;
                 });
-                console.log(`[${alias}] Response headers:`, responseHeadersObj);
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error(`[${alias}] Error response from server:`, errorText);
                     res.status(response.status).json({
                         error: {
                             message: `Backend server error: ${response.status} ${response.statusText}`,
@@ -175,7 +154,6 @@ export class ProxyService {
                             done = result.done || false;
                             if (result.value) {
                                 const chunk = decoder.decode(result.value);
-                                console.log(`[${alias}] Streaming chunk:`, chunk);
                                 // Forward the SSE data as-is without parsing
                                 res.write(chunk);
                             }
@@ -186,16 +164,13 @@ export class ProxyService {
                     res.end();
                 } else {
                     const data = await response.json() as Record<string, unknown>;
-                    console.log(`[${alias}] Response data:`, data);
                     res.json(data);
                 }
             } catch (error) {
                 console.error(`[${alias}] Error in proxy request:`, error);
                 // Log more details about the error
                 if (error instanceof Error) {
-                    console.error(`[${alias}] Error stack:`, error.stack);
-                    console.error(`[${alias}] Error name:`, error.name);
-                    console.error(`[${alias}] Error message:`, error.message);
+                    console.error(`[${alias}] Error stack:`, error);
                 }
 
                 res.status(500).json({
@@ -214,7 +189,6 @@ export class ProxyService {
             try {
                 const server = app.listen(port, () => {
                     this.servers[alias] = { app, server };
-                    console.log(`[${alias}] Proxy server started on port ${port}`);
                     resolve(port);
                 });
 
@@ -234,7 +208,6 @@ export class ProxyService {
         if (server?.server) {
             server.server.close();
             delete this.servers[alias];
-            console.log(`[${alias}] Server stopped`);
         }
     }
 

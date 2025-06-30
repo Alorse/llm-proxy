@@ -8,10 +8,8 @@ interface Model {
 }
 
 export const getModelsPanel = (models: Model[]) => {
-    console.log('Generating panel HTML with models:', models);
     
     const getModelHtml = (model: Model) => {
-        console.log('Generating HTML for model:', model);
         return `
             <div class="model-container">
                 <div class="model-header">${model.alias}
@@ -160,7 +158,6 @@ export const getModelsPanel = (models: Model[]) => {
                     // Initialize state with models data
                     const initialState = { models: ${JSON.stringify(models)} };
                     vscode.setState(initialState);
-                    console.log('Initial state set:', initialState);
 
                     // Update the content without reloading
                     function updateContent(models) {
@@ -179,32 +176,26 @@ export const getModelsPanel = (models: Model[]) => {
                     // Define actions in a namespace to avoid global scope pollution
                     window.proxyActions = {
                         startProxy: function(alias) {
-                            console.log('Starting proxy for:', alias);
                             vscode.postMessage({ type: 'startProxy', alias });
                         },
 
                         stopProxy: function(alias) {
-                            console.log('Stopping proxy for:', alias);
                             vscode.postMessage({ type: 'stopProxy', alias });
                         },
 
                         deleteModel: function(alias) {
-                            console.log('Deleting model:', alias);
                             vscode.postMessage({ type: 'deleteModel', alias });
                         },
 
                         editModel: function(alias) {
-                            console.log('Editing model:', alias);
                             vscode.postMessage({ type: 'editModel', alias });
                         },
 
                         addModel: function() {
-                            console.log('Adding new model');
                             vscode.postMessage({ type: 'addModel' });
                         },
 
                         setDefault: function(alias) {
-                            console.log('Set default model:', alias);
                             vscode.postMessage({ type: 'setDefault', alias });
                         }
                     };
@@ -212,11 +203,9 @@ export const getModelsPanel = (models: Model[]) => {
                     // Listen for messages from the extension
                     window.addEventListener('message', event => {
                         const message = event.data;
-                        console.log('Received message:', message);
                         
                         switch (message.type) {
                             case 'updateModels':
-                                console.log('Updating models:', message.models);
                                 vscode.setState({ models: message.models });
                                 updateContent(message.models);
                                 break;
