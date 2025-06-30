@@ -6,6 +6,7 @@ export interface Model {
     alias: string;
     url: string;
     realModel: string;
+    default?: boolean;
 }
 
 export class ModelManager {
@@ -38,8 +39,8 @@ export class ModelManager {
         return model;
     }
 
-    public async addModel(alias: string, url: string, realModel: string): Promise<string> {
-        console.log(`Adding model: ${alias}, ${url}, ${realModel}`);
+    public async addModel(alias: string, url: string, realModel: string, isDefault: boolean = false): Promise<string> {
+        console.log(`Adding model: ${alias}, ${url}, ${realModel}, default: ${isDefault}`);
         const models = await this.getModels();
         
         // Check if alias already exists
@@ -47,15 +48,20 @@ export class ModelManager {
             throw new Error(`Model with alias ${alias} already exists`);
         }
 
+        // Si es default, desmarcar los demás
+        if (isDefault) {
+            Object.values(models).forEach(model => { model.default = false; });
+        }
+
         const id = Date.now().toString();
-        models[id] = { id, alias, url, realModel };
+        models[id] = { id, alias, url, realModel, default: isDefault };
         await this.context.globalState.update('models', models);
         console.log('Model added successfully:', models[id]);
         return id;
     }
 
-    public async updateModel(id: string, alias: string, url: string, realModel: string): Promise<void> {
-        console.log(`Updating model: ${id}, ${alias}, ${url}, ${realModel}`);
+    public async updateModel(id: string, alias: string, url: string, realModel: string, isDefault?: boolean): Promise<void> {
+        console.log(`Updating model: ${id}, ${alias}, ${url}, ${realModel}, default: ${isDefault}`);
         const models = await this.getModels();
         
         // Check if the new alias already exists (except for the current model)
@@ -67,12 +73,17 @@ export class ModelManager {
             throw new Error(`Model with ID ${id} not found`);
         }
 
+        // Si es default, desmarcar los demás
+        if (isDefault) {
+            Object.values(models).forEach(model => { model.default = false; });
+        }
+
         // If the model is running, stop it first
         if (this.proxyService.isRunning(models[id].alias)) {
             this.proxyService.stopServer(models[id].alias);
         }
 
-        models[id] = { id, alias, url, realModel };
+        models[id] = { id, alias, url, realModel, default: isDefault ?? models[id].default };
         await this.context.globalState.update('models', models);
         console.log('Model updated successfully:', models[id]);
     }

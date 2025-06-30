@@ -4,6 +4,7 @@ interface Model {
     url: string;
     isRunning: boolean;
     port?: number;
+    default?: boolean;
 }
 
 export const getModelsPanel = (models: Model[]) => {
@@ -13,7 +14,12 @@ export const getModelsPanel = (models: Model[]) => {
         console.log('Generating HTML for model:', model);
         return `
             <div class="model-container">
-                <div class="model-header">${model.alias}</div>
+                <div class="model-header">${model.alias}
+                    <div class="model-header-actions">
+                        ${model.default ? '<span style="color: var(--vscode-testing-iconPassed); margin-left: 8px;">(Default)</span>' : ''}
+                        ${!model.default ? `<button class="action-button" onclick="window.proxyActions.setDefault('${model.alias}')">Set Default</button>` : ''}
+                    </div>
+                </div>
                 <table>
                     <tr>
                         <td>Status</td>
@@ -77,6 +83,9 @@ export const getModelsPanel = (models: Model[]) => {
                     padding: 8px;
                     border-bottom: 1px solid var(--vscode-panel-border);
                     font-weight: bold;
+                }
+                .model-header-actions {
+                    float: right;
                 }
                 table {
                     width: 100%;
@@ -192,6 +201,11 @@ export const getModelsPanel = (models: Model[]) => {
                         addModel: function() {
                             console.log('Adding new model');
                             vscode.postMessage({ type: 'addModel' });
+                        },
+
+                        setDefault: function(alias) {
+                            console.log('Set default model:', alias);
+                            vscode.postMessage({ type: 'setDefault', alias });
                         }
                     };
 

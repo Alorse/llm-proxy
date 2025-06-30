@@ -143,6 +143,16 @@ export class ModelsPanel {
                             await this._update();
                             break;
                         }
+                        case 'setDefault': {
+                            if (message.alias) {
+                                const model = await this._modelManager.getModel(message.alias);
+                                if (model) {
+                                    await this._modelManager.updateModel(model.id, model.alias, model.url, model.realModel, true);
+                                    await this._update();
+                                }
+                            }
+                            break;
+                        }
                     }
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
