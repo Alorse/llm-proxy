@@ -64,6 +64,80 @@ export class ModelsPanel {
                                 await this._update();
                             }
                             break;
+                        case 'editModel':
+                            if (message.alias) {
+                                const model = await this._modelManager.getModel(message.alias);
+                                if (model) {
+                                    const alias = await vscode.window.showInputBox({
+                                        prompt: 'Enter model alias',
+                                        value: model.alias,
+                                        validateInput: text => {
+                                            return text && text.length > 0 ? null : 'Alias is required';
+                                        }
+                                    });
+                                    if (!alias) { return; }
+
+                                    const realModel = await vscode.window.showInputBox({
+                                        prompt: 'Enter real model name',
+                                        value: model.realModel,
+                                        validateInput: text => {
+                                            return text && text.length > 0 ? null : 'Real model name is required';
+                                        }
+                                    });
+                                    if (!realModel) { return; }
+
+                                    const url = await vscode.window.showInputBox({
+                                        prompt: 'Enter backend URL',
+                                        value: model.url,
+                                        validateInput: text => {
+                                            try {
+                                                new URL(text);
+                                                return null;
+                                            } catch {
+                                                return 'Please enter a valid URL';
+                                            }
+                                        }
+                                    });
+                                    if (!url) { return; }
+
+                                    await this._modelManager.updateModel(model.id, alias, url, realModel);
+                                    await this._update();
+                                }
+                            }
+                            break;
+                        case 'addModel':
+                            const alias = await vscode.window.showInputBox({
+                                prompt: 'Enter model alias',
+                                validateInput: text => {
+                                    return text && text.length > 0 ? null : 'Alias is required';
+                                }
+                            });
+                            if (!alias) { return; }
+
+                            const realModel = await vscode.window.showInputBox({
+                                prompt: 'Enter real model name',
+                                validateInput: text => {
+                                    return text && text.length > 0 ? null : 'Real model name is required';
+                                }
+                            });
+                            if (!realModel) { return; }
+
+                            const url = await vscode.window.showInputBox({
+                                prompt: 'Enter backend URL',
+                                validateInput: text => {
+                                    try {
+                                        new URL(text);
+                                        return null;
+                                    } catch {
+                                        return 'Please enter a valid URL';
+                                    }
+                                }
+                            });
+                            if (!url) { return; }
+
+                            await this._modelManager.addModel(alias, url, realModel);
+                            await this._update();
+                            break;
                     }
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';

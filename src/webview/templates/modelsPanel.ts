@@ -45,6 +45,7 @@ export const getModelsPanel = (models: Model[]) => {
                             ` : `
                                 <button class="action-button" onclick="window.proxyActions.startProxy('${model.alias}')">Start Proxy</button>
                             `}
+                            <button class="action-button" onclick="window.proxyActions.editModel('${model.alias}')">Edit</button>
                             <button class="action-button" onclick="window.proxyActions.deleteModel('${model.alias}')">Delete</button>
                         </td>
                     </tr>
@@ -121,11 +122,27 @@ export const getModelsPanel = (models: Model[]) => {
                     padding: 20px;
                     color: var(--vscode-descriptionForeground);
                 }
+                .add-model-button {
+                    display: block;
+                    width: 100%;
+                    padding: 8px;
+                    margin-bottom: 16px;
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                }
+                .add-model-button:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
             </style>
         </head>
         <body>
+            <button class="add-model-button" onclick="window.proxyActions.addModel()">+ Add New Model</button>
             <div id="models-container">
-                ${models.length > 0 ? models.map(getModelHtml).join('') : '<div id="no-models">No models available. Use the "LLM Proxy: Add Model" command to add a new model.</div>'}
+                ${models.length > 0 ? models.map(getModelHtml).join('') : '<div id="no-models">No models available. Click the button above to add a new model.</div>'}
             </div>
             <script>
                 (function() {
@@ -142,7 +159,7 @@ export const getModelsPanel = (models: Model[]) => {
                         if (!container) return;
 
                         if (models.length === 0) {
-                            container.innerHTML = '<div id="no-models">No models available. Use the "LLM Proxy: Add Model" command to add a new model.</div>';
+                            container.innerHTML = '<div id="no-models">No models available. Click the button above to add a new model.</div>';
                             return;
                         }
 
@@ -165,6 +182,16 @@ export const getModelsPanel = (models: Model[]) => {
                         deleteModel: function(alias) {
                             console.log('Deleting model:', alias);
                             vscode.postMessage({ type: 'deleteModel', alias });
+                        },
+
+                        editModel: function(alias) {
+                            console.log('Editing model:', alias);
+                            vscode.postMessage({ type: 'editModel', alias });
+                        },
+
+                        addModel: function() {
+                            console.log('Adding new model');
+                            vscode.postMessage({ type: 'addModel' });
                         }
                     };
 
