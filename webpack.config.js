@@ -6,6 +6,7 @@ const path = require('path');
 
 /**@type {import('webpack').Configuration}*/
 const config = {
+  mode: 'production',
   target: 'node',
   entry: './src/extension.ts',
   output: {
