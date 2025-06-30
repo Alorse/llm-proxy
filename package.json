@@ -5,6 +5,7 @@
   "version": "0.1.3",
   "publisher": "Alorse",
   "repository": "https://github.com/Alorse/llm-proxy",
+  "icon": "assets/icon.png",
   "engines": {
     "vscode": "^1.86.0"
   },
