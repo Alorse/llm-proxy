@@ -42,7 +42,7 @@ export class ProxyService {
         }
 
         const app = express();
-        const port = await this.findAvailablePort(3000);
+        const port = await this.findAvailablePort(4321);
 
         app.use(express.json());
 
