@@ -1,13 +1,21 @@
 import express from 'express';
+import * as http from 'http';
+import * as net from 'net';
 import { Model } from '../data/ModelManager';
 
 interface ProxyServer {
     app: express.Application;
-    server: any;
+    server: http.Server;
 }
 
 interface ProxyServers {
     [alias: string]: ProxyServer;
+}
+
+interface ServerAddress {
+    port: number;
+    family: string;
+    address: string;
 }
 
 export class ProxyService {
@@ -34,7 +42,7 @@ export class ProxyService {
         }
 
         const app = express();
-        const port = await this.findAvailablePort(4123);
+        const port = await this.findAvailablePort(3000);
 
         app.use(express.json());
 
@@ -43,7 +51,7 @@ export class ProxyService {
                 // Log incoming request
                 console.log(`[${alias}] Incoming request:`, {
                     headers: req.headers,
-                    body: req.body
+                    body: req.body as Record<string, unknown>
                 });
 
                 // Forward all headers except those we want to control
@@ -76,7 +84,7 @@ export class ProxyService {
                 console.log(`[${alias}] With headers:`, headers);
 
                 const requestBody = {
-                    ...req.body,
+                    ...(req.body as Record<string, unknown>),
                     model: model.realModel
                 };
                 const requestBodyString = JSON.stringify(requestBody);
@@ -147,7 +155,8 @@ export class ProxyService {
                     }
                 });
 
-                const isStreaming = req.body.stream === true;
+                const reqBody = req.body as Record<string, unknown>;
+                const isStreaming = reqBody.stream === true;
                 if (isStreaming) {
                     res.setHeader('Content-Type', 'text/event-stream');
                     res.setHeader('Cache-Control', 'no-cache');
@@ -159,17 +168,24 @@ export class ProxyService {
                     }
 
                     const decoder = new TextDecoder();
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const chunk = decoder.decode(value);
-                        console.log(`[${alias}] Streaming chunk:`, chunk);
-                        // Forward the SSE data as-is without parsing
-                        res.write(chunk);
+                    try {
+                        let done = false;
+                        while (!done) {
+                            const result = await reader.read();
+                            done = result.done || false;
+                            if (result.value) {
+                                const chunk = decoder.decode(result.value);
+                                console.log(`[${alias}] Streaming chunk:`, chunk);
+                                // Forward the SSE data as-is without parsing
+                                res.write(chunk);
+                            }
+                        }
+                    } finally {
+                        reader.releaseLock();
                     }
                     res.end();
                 } else {
-                    const data = await response.json();
+                    const data = await response.json() as Record<string, unknown>;
                     console.log(`[${alias}] Response data:`, data);
                     res.json(data);
                 }
@@ -215,7 +231,7 @@ export class ProxyService {
 
     public stopServer(alias: string): void {
         const server = this.servers[alias];
-        if (server) {
+        if (server?.server) {
             server.server.close();
             delete this.servers[alias];
             console.log(`[${alias}] Server stopped`);
@@ -232,8 +248,8 @@ export class ProxyService {
             return undefined;
         }
 
-        const address = server.server.address();
-        if (!address || typeof address === 'string') {
+        const address = server.server.address() as ServerAddress | null;
+        if (!address) {
             return undefined;
         }
 
@@ -243,11 +259,10 @@ export class ProxyService {
     private async findAvailablePort(startPort: number): Promise<number> {
         const isPortAvailable = (port: number): Promise<boolean> => {
             return new Promise((resolve) => {
-                const server = require('net').createServer();
+                const server = net.createServer();
                 server.once('error', () => resolve(false));
                 server.once('listening', () => {
-                    server.close();
-                    resolve(true);
+                    server.close(() => resolve(true));
                 });
                 server.listen(port);
             });

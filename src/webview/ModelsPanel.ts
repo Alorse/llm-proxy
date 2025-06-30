@@ -43,7 +43,7 @@ export class ModelsPanel {
                         case 'refresh':
                             await this._update();
                             break;
-                        case 'startProxy':
+                        case 'startProxy': {
                             if (message.alias) {
                                 const model = await this._modelManager.getModel(message.alias);
                                 if (model) {
@@ -52,19 +52,22 @@ export class ModelsPanel {
                                 }
                             }
                             break;
-                        case 'stopProxy':
+                        }
+                        case 'stopProxy': {
                             if (message.alias) {
                                 await this._modelManager.stopProxy(message.alias);
                                 await this._update();
                             }
                             break;
-                        case 'deleteModel':
+                        }
+                        case 'deleteModel': {
                             if (message.alias) {
                                 await this._modelManager.deleteModel(message.alias);
                                 await this._update();
                             }
                             break;
-                        case 'editModel':
+                        }
+                        case 'editModel': {
                             if (message.alias) {
                                 const model = await this._modelManager.getModel(message.alias);
                                 if (model) {
@@ -105,7 +108,8 @@ export class ModelsPanel {
                                 }
                             }
                             break;
-                        case 'addModel':
+                        }
+                        case 'addModel': {
                             const alias = await vscode.window.showInputBox({
                                 prompt: 'Enter model alias',
                                 validateInput: text => {
@@ -138,6 +142,7 @@ export class ModelsPanel {
                             await this._modelManager.addModel(alias, url, realModel);
                             await this._update();
                             break;
+                        }
                     }
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';

@@ -21,15 +21,26 @@ export function activate(context: vscode.ExtensionContext) {
                 ModelsPanel.createOrShow(context.extensionUri, modelManager, webviewView.webview);
 
                 // Handle visibility changes
-                webviewView.onDidChangeVisibility(() => {
+                webviewView.onDidChangeVisibility(async () => {
                     if (webviewView.visible) {
-                        void ModelsPanel.refresh();
+                        try {
+                            await ModelsPanel.refresh();
+                        } catch (error) {
+                            console.error('Error refreshing panel:', error);
+                            try {
+                                await vscode.window.showErrorMessage('Failed to refresh models panel');
+                            } catch (err) {
+                                console.error('Error showing error message:', err);
+                            }
+                        }
                     }
                 });
 
                 // Handle dispose
                 webviewView.onDidDispose(() => {
-                    ModelsPanel.currentPanel?.dispose();
+                    if (ModelsPanel.currentPanel) {
+                        ModelsPanel.currentPanel.dispose();
+                    }
                 });
             }
         },
