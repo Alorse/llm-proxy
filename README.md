@@ -1,5 +1,9 @@
 # LLM Proxy
 
+<p align="center">
+  <img src="assets/screenshot1-llm-proxy.png" alt="LLM Proxy Screenshot" />
+</p>
+
 This VSCode extension allows any BYOK (Bring Your Own Key) AI editor or extension, such as Cursor or Continue, to connect to any HTTP-compatible LLM by aliasing it as a different model (e.g., `gpt-4o`). The extension starts a local server that proxies requests, enabling you to bypass restrictions and unlock features that are often limited to specific models like Claude or OpenAI's GPT series.
 
 ## Why Use LLM Proxy?
