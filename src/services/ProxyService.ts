@@ -61,7 +61,7 @@ export class ProxyService {
 
         app.use(express.json());
 
-        const handleRequest = async (req: express.Request, res: express.Response) => {
+        const handleRequest = async (req: express.Request, res: express.Response, method: string, endpoint: string) => {
             try {
                 // Forward all headers except those we want to control
                 const headers = { ...req.headers };
@@ -71,11 +71,14 @@ export class ProxyService {
                 delete headers['accept-encoding']; // Let fetch handle compression
                 delete headers['postman-token']; // Remove Postman-specific headers
 
-                // Ensure content-type is set
-                headers['content-type'] = 'application/json';
+                // Ensure content-type is set for POST requests
+                if (method.toUpperCase() === 'POST') {
+                    headers['content-type'] = 'application/json';
+                }
 
                 // Construct and validate target URL
-                const targetUrl = `${model.url}/chat/completions`;
+                const targetUrl = `${model.url}${endpoint}`;
+                console.log(`[${alias}] Making ${method} request to: ${targetUrl}`);
                 try {
                     new URL(targetUrl);
                 } catch (error) {
@@ -88,18 +91,22 @@ export class ProxyService {
                     return;
                 }
 
-                const requestBody = {
-                    ...(req.body as Record<string, unknown>),
-                    model: model.realModel
-                };
-                const requestBodyString = JSON.stringify(requestBody);
+                // Prepare request body for POST requests
+                let requestBody: string | undefined;
+                if (method.toUpperCase() === 'POST' && req.body) {
+                    const bodyWithModel = {
+                        ...(req.body as Record<string, unknown>),
+                        model: model.realModel
+                    };
+                    requestBody = JSON.stringify(bodyWithModel);
+                }
 
                 let response;
                 try {
                     response = await fetch(targetUrl, {
-                        method: 'POST',
+                        method: method.toUpperCase(),
                         headers: headers as HeadersInit,
-                        body: requestBodyString
+                        body: requestBody
                     });
                 } catch (fetchError) {
                     // Check if it's a DNS or connection error
@@ -150,7 +157,7 @@ export class ProxyService {
                 });
 
                 const reqBody = req.body as Record<string, unknown>;
-                const isStreaming = reqBody.stream === true;
+                const isStreaming = reqBody && reqBody.stream === true;
                 if (isStreaming) {
                     res.setHeader('Content-Type', 'text/event-stream');
                     res.setHeader('Cache-Control', 'no-cache');
@@ -198,7 +205,14 @@ export class ProxyService {
             }
         };
 
-        app.post('/v1/chat/completions', handleRequest);
+        // Handle GET /v1/models endpoint
+        app.get('/v1/models', (req, res) => handleRequest(req, res, 'GET', '/models'));
+
+        // Handle POST /v1/chat/completions endpoint
+        app.post('/v1/chat/completions', (req, res) => handleRequest(req, res, 'POST', '/chat/completions'));
+
+        // Temporary debug endpoint to test if chat/completions works with GET
+        app.get('/debug/chat', (req, res) => handleRequest(req, res, 'GET', '/v1/chat/completions'));
 
         return new Promise((resolve, reject) => {
             try {
