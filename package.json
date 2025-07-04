@@ -2,7 +2,7 @@
   "name": "llm-proxy",
   "displayName": "LLM Proxy",
   "description": "Allows any BYOK AI editor or extension, such as Cursor or Continue, to connect to any openai-compatible LLM by aliasing it as a different model.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "Alorse",
   "repository": "https://github.com/Alorse/llm-proxy",
   "icon": "assets/icon.png",
