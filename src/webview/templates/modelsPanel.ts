@@ -38,7 +38,7 @@ export const getModelsPanel = (models: Model[]) => {
                     ${model.isRunning ? `
                     <tr>
                         <td>Proxy URL</td>
-                        <td>http://localhost:${model.port}/v1/chat/completions</td>
+                        <td>http://localhost:${model.port}/v1</td>
                     </tr>
                     ` : ''}
                     <tr>

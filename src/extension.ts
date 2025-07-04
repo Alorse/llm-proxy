@@ -153,7 +153,7 @@ async function updateStatusBar(forceText?: string) {
         statusBarItem.tooltip = 'Click to copy the proxy URL to clipboard';
     } else if (isRunning && port) {
         statusBarItem.text = `LLM Proxy: ${defaultModel.alias} (${port}) $(clippy)`;
-        statusBarItem.tooltip = `Click to copy: http://localhost:${port}/v1/chat/completions`;
+        statusBarItem.tooltip = `Click to copy: http://localhost:${port}/v1`;
     } else {
         statusBarItem.text = `LLM Proxy: ${defaultModel.alias} (Stopped) $(clippy)`;
         statusBarItem.tooltip = 'Click to copy the proxy URL to clipboard';

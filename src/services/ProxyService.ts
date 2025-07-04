@@ -71,6 +71,12 @@ export class ProxyService {
                 delete headers['accept-encoding']; // Let fetch handle compression
                 delete headers['postman-token']; // Remove Postman-specific headers
 
+                // For GET requests, use a non-browser user-agent to avoid ngrok warning page
+                if (method.toUpperCase() === 'GET') {
+                    headers['user-agent'] = 'llm-proxy/1.0';
+                    headers['ngrok-skip-browser-warning'] = 'true';
+                }
+
                 // Ensure content-type is set for POST requests
                 if (method.toUpperCase() === 'POST') {
                     headers['content-type'] = 'application/json';
@@ -210,9 +216,6 @@ export class ProxyService {
 
         // Handle POST /v1/chat/completions endpoint
         app.post('/v1/chat/completions', (req, res) => handleRequest(req, res, 'POST', '/chat/completions'));
-
-        // Temporary debug endpoint to test if chat/completions works with GET
-        app.get('/debug/chat', (req, res) => handleRequest(req, res, 'GET', '/v1/chat/completions'));
 
         return new Promise((resolve, reject) => {
             try {
