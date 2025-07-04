@@ -44,6 +44,21 @@ export class ProxyService {
         const app = express();
         const port = await this.findAvailablePort(4321);
 
+        // Configure CORS to allow requests from VS Code
+        app.use((req, res, next) => {
+            res.header('Access-Control-Allow-Origin', '*');
+            res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+            
+            // Handle preflight requests
+            if (req.method === 'OPTIONS') {
+                res.sendStatus(200);
+                return;
+            }
+            
+            next();
+        });
+
         app.use(express.json());
 
         const handleRequest = async (req: express.Request, res: express.Response) => {
