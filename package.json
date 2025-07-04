@@ -10,6 +10,10 @@
     "vscode": "^1.86.0"
   },
   "categories": [
+    "AI",
+    "Machine Learning",
+    "Programming Languages",
+    "Chat",
     "Other"
   ],
   "activationEvents": [],
